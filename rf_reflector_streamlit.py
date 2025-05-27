@@ -161,6 +161,32 @@ def compute_catacaustic_points(angle_deg, focal, hole_radius, dish_radius):
     
     return points
 
+def get_color_for_angle(angle, min_angle, max_angle):
+    """Get a distinct color for each angle using a color gradient"""
+    # Normalize angle to 0-1 range
+    normalized = (angle - min_angle) / (max_angle - min_angle) if max_angle != min_angle else 0.5
+    
+    # Use a color scale from blue (cold/low angles) to red (hot/high angles)
+    # You can modify this to use other color schemes
+    colors = [
+        '#0000FF',  # Blue
+        '#0080FF',  # Light Blue
+        '#00FFFF',  # Cyan
+        '#00FF80',  # Green-Cyan
+        '#00FF00',  # Green
+        '#80FF00',  # Yellow-Green
+        '#FFFF00',  # Yellow
+        '#FF8000',  # Orange
+        '#FF0000',  # Red
+        '#FF0080',  # Pink-Red
+    ]
+    
+    # Get color index
+    color_index = int(normalized * (len(colors) - 1))
+    color_index = max(0, min(color_index, len(colors) - 1))
+    
+    return colors[color_index]
+
 def intersect_ray_with_paraboloid(P0, D, focal, hole_radius):
     """Find intersection of ray with paraboloid using bisection method"""
     def f(t):
@@ -454,8 +480,89 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
     
     return fig
 
+def create_multi_angle_visualization(angle_values, focal_length, hole_radius, dish_diameter, 
+                                   show_focal_plane=True, show_rotated_plane=False):
+    """Create visualization showing catacaustic points for all angles with distinct colors"""
+    dish_radius = dish_diameter / 2
+    
+    # Generate surface data
+    X_surf, Y_surf, Z_surf = generate_paraboloid_surface(focal_length, hole_radius, dish_radius)
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Add paraboloid surface with good visibility
+    fig.add_trace(go.Surface(
+        x=X_surf, y=Y_surf, z=Z_surf,
+        colorscale='Viridis',
+        opacity=0.6,
+        showscale=False,
+        name='Parabolic Dish'
+    ))
+    
+    # Add focus point
+    fig.add_trace(go.Scatter3d(
+        x=[0], y=[0], z=[focal_length],
+        mode='markers',
+        marker=dict(size=12, color='yellow', symbol='diamond'),
+        name='Focus Point'
+    ))
+    
+    # Add focal plane
+    if show_focal_plane:
+        X_focal, Y_focal, Z_focal = generate_focal_plane(focal_length, dish_radius)
+        fig.add_trace(go.Surface(
+            x=X_focal, y=Y_focal, z=Z_focal,
+            opacity=0.15,
+            colorscale=[[0, 'cyan'], [1, 'cyan']],
+            showscale=False,
+            name='Focal Plane (z = f)'
+        ))
+    
+    # Add catacaustic points for each angle with distinct colors
+    min_angle = min(angle_values)
+    max_angle = max(angle_values)
+    
+    for i, angle in enumerate(angle_values):
+        cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_radius)
+        
+        if cat_points:
+            cat_x = [p[0] for p in cat_points]
+            cat_y = [p[1] for p in cat_points]
+            cat_z = [p[2] for p in cat_points]
+            
+            # Get distinct color for this angle
+            color = get_color_for_angle(angle, min_angle, max_angle)
+            
+            fig.add_trace(go.Scatter3d(
+                x=cat_x, y=cat_y, z=cat_z,
+                mode='markers',
+                marker=dict(size=3, color=color),
+                name=f'θ={angle:.1f}°'
+            ))
+    
+    # Set scene properties for full dish view
+    scene_dict = dict(
+        aspectmode='data',
+        xaxis_title='X (m)',
+        yaxis_title='Y (m)',
+        zaxis_title='Z (m)',
+        camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+    )
+    
+    # Update layout
+    fig.update_layout(
+        title=f'RF Paraboloid Multi-Angle Catacaustic (f={focal_length:.3f} m)',
+        scene=scene_dict,
+        height=700,
+        template='plotly_dark',
+        showlegend=True
+    )
+    
+    return fig
+
 def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter):
-    """Create GIF animation of catacaustic collapse"""
+    """Create GIF animation showing full dish with colored catacaustic points"""
     try:
         # Check if kaleido is available for image export
         import kaleido
@@ -469,15 +576,81 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
     status_text = st.empty()
     
     try:
+        dish_radius = dish_diameter / 2
+        min_angle = min(angle_values)
+        max_angle = max(angle_values)
+        
+        # Generate surface data once
+        X_surf, Y_surf, Z_surf = generate_paraboloid_surface(focal_length, hole_radius, dish_radius)
+        
         for i, angle in enumerate(angle_values):
             status_text.text(f"Generating frame {i+1}/{len(angle_values)} (θ={angle:.1f}°)")
             
-            # Create figure for this angle with zoom
-            fig = create_plotly_visualization(
-                angle, hole_radius, focal_length, dish_diameter,
-                show_incident=False, grid_res=3, show_focal_plane=True, 
-                show_rotated_plane=False, single_ray_data=None, 
-                zoom_to_catacaustic=True
+            # Create figure for this frame
+            fig = go.Figure()
+            
+            # Add paraboloid surface (consistent across all frames)
+            fig.add_trace(go.Surface(
+                x=X_surf, y=Y_surf, z=Z_surf,
+                colorscale='Viridis',
+                opacity=0.6,
+                showscale=False,
+                name='Parabolic Dish'
+            ))
+            
+            # Add focus point
+            fig.add_trace(go.Scatter3d(
+                x=[0], y=[0], z=[focal_length],
+                mode='markers',
+                marker=dict(size=12, color='yellow', symbol='diamond'),
+                name='Focus Point'
+            ))
+            
+            # Add focal plane
+            X_focal, Y_focal, Z_focal = generate_focal_plane(focal_length, dish_radius)
+            fig.add_trace(go.Surface(
+                x=X_focal, y=Y_focal, z=Z_focal,
+                opacity=0.15,
+                colorscale=[[0, 'cyan'], [1, 'cyan']],
+                showscale=False,
+                name='Focal Plane'
+            ))
+            
+            # Add catacaustic points for current angle
+            cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_radius)
+            
+            if cat_points:
+                cat_x = [p[0] for p in cat_points]
+                cat_y = [p[1] for p in cat_points]
+                cat_z = [p[2] for p in cat_points]
+                
+                # Get distinct color for this angle
+                color = get_color_for_angle(angle, min_angle, max_angle)
+                
+                fig.add_trace(go.Scatter3d(
+                    x=cat_x, y=cat_y, z=cat_z,
+                    mode='markers',
+                    marker=dict(size=4, color=color),
+                    name=f'Catacaustic θ={angle:.1f}°'
+                ))
+            
+            # Set consistent scene properties (full dish view)
+            scene_dict = dict(
+                aspectmode='data',
+                xaxis_title='X (m)',
+                yaxis_title='Y (m)',
+                zaxis_title='Z (m)',
+                camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+            )
+            
+            # Update layout
+            fig.update_layout(
+                title=f'RF Paraboloid Catacaustic Animation (f={focal_length:.3f} m, θ={angle:.1f}°)',
+                scene=scene_dict,
+                height=600,
+                width=800,
+                template='plotly_dark',
+                showlegend=False  # Hide legend for cleaner animation
             )
             
             # Convert to image
@@ -495,7 +668,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 format='GIF',
                 save_all=True,
                 append_images=images[1:],
-                duration=500,  # 500ms per frame
+                duration=600,  # 600ms per frame for better visibility
                 loop=0  # Loop forever
             )
             gif_buffer.seek(0)
@@ -506,7 +679,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
             return gif_buffer.getvalue()
     
     except Exception as e:
-        st.error(f"❌ Error creating GIF: Please install kaleido with: pip install kaleido")
+        st.error(f"❌ Error creating GIF: {str(e)}")
         progress_bar.empty()
         status_text.empty()
         return None
@@ -608,8 +781,15 @@ def main():
         help="Show catacaustic collapse animation"
     )
     
+    # Multi-angle visualization
+    show_multi_angle = st.sidebar.checkbox(
+        "Show Multi-Angle View",
+        value=False,
+        help="Display catacaustic points for multiple angles simultaneously"
+    )
+    
     # Define angle variables for both modes
-    if animate_angles:
+    if animate_angles or show_multi_angle:
         angle_start = st.sidebar.slider("Start Angle (deg):", 0.0, 90.0, 50.0, 1.0)
         angle_end = st.sidebar.slider("End Angle (deg):", 0.0, 90.0, 90.0, 1.0)
         angle_steps = st.sidebar.slider("Animation Steps:", 3, 20, 10, 1)
@@ -620,17 +800,18 @@ def main():
         else:
             incident_angle = angle_end  # Default to end angle when not animating
         
-        col_a, col_b = st.sidebar.columns(2)
-        with col_a:
-            if st.button("▶️ Play Animation"):
-                st.session_state.animate = True
-                st.session_state.angle_values = linspace(angle_start, angle_end, angle_steps)
-                st.session_state.current_frame = 0
-        
-        with col_b:
-            if st.button("🎬 Create GIF"):
-                st.session_state.create_gif = True
-                st.session_state.gif_angles = linspace(angle_start, angle_end, angle_steps)
+        if animate_angles:
+            col_a, col_b = st.sidebar.columns(2)
+            with col_a:
+                if st.button("▶️ Play Animation"):
+                    st.session_state.animate = True
+                    st.session_state.angle_values = linspace(angle_start, angle_end, angle_steps)
+                    st.session_state.current_frame = 0
+            
+            with col_b:
+                if st.button("🎬 Create GIF"):
+                    st.session_state.create_gif = True
+                    st.session_state.gif_angles = linspace(angle_start, angle_end, angle_steps)
     else:
         # Single angle control - always available
         incident_angle = st.sidebar.slider(
@@ -692,7 +873,10 @@ def main():
             st.metric("Aperture Efficiency", f"{efficiency:.1%}")
         
         # Current angle display - always show the current incident angle
-        st.metric("Current Incident Angle", f"{incident_angle:.1f}°")
+        if not show_multi_angle:
+            st.metric("Current Incident Angle", f"{incident_angle:.1f}°")
+        else:
+            st.metric("Angle Range", f"{angle_start:.1f}° - {angle_end:.1f}°")
         
         # Animation status
         if animate_angles:
@@ -705,7 +889,7 @@ def main():
                 st.info("Click ▶️ to start animation")
         
         # Single ray analysis
-        if analyze_ray:
+        if analyze_ray and not show_multi_angle:
             st.subheader("🔬 Ray Path Analysis")
             ray_data = compute_ray_path(incident_angle, focal_length, hole_radius, ray_radius, ray_theta)
             
@@ -739,13 +923,13 @@ def main():
                 st.success("✅ GIF animation created successfully!")
                 
                 # Display the GIF
-                st.image(gif_data, caption="Catacaustic Collapse Animation")
+                st.image(gif_data, caption="Catacaustic Evolution Animation - Full Dish View")
                 
                 # Download button
                 st.download_button(
                     label="📥 Download GIF",
                     data=gif_data,
-                    file_name=f"catacaustic_collapse_f{focal_length:.3f}_hole{hole_radius:.3f}.gif",
+                    file_name=f"catacaustic_evolution_f{focal_length:.3f}_hole{hole_radius:.3f}.gif",
                     mime="image/gif"
                 )
                 
@@ -754,11 +938,33 @@ def main():
                 **Animation Details:**
                 - Angles: {st.session_state.gif_angles[0]:.1f}° → {st.session_state.gif_angles[-1]:.1f}°
                 - Frames: {len(st.session_state.gif_angles)}
-                - Duration: {len(st.session_state.gif_angles) * 0.5:.1f} seconds
-                - Focus: {'Ring collapse' if hole_radius > 0 else 'Point collapse'}
+                - Duration: {len(st.session_state.gif_angles) * 0.6:.1f} seconds
+                - View: Full paraboloid dish with colored points
+                - Colors: Blue (low angles) → Red (high angles)
                 """)
             
             st.session_state.create_gif = False
+        
+        # Handle multi-angle static view
+        elif show_multi_angle:
+            st.subheader("🌈 Multi-Angle Catacaustic View")
+            
+            with st.spinner("🔄 Computing multi-angle visualization..."):
+                angle_list = linspace(angle_start, angle_end, angle_steps)
+                
+                fig = create_multi_angle_visualization(
+                    angle_list, focal_length, hole_radius, dish_diameter,
+                    show_focal_plane, show_rotated_plane
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+            st.info(f"""
+            **Multi-Angle View:**
+            - Showing {len(angle_list)} different incident angles
+            - Each angle has a distinct color
+            - Colors range from blue (low angles) to red (high angles)
+            - All catacaustic points displayed simultaneously
+            """)
         
         # Handle live animation
         elif animate_angles and st.session_state.get('animate', False):
@@ -826,21 +1032,45 @@ def main():
         with col_export1:
             if st.button("📊 Export Catacaustic Points"):
                 with st.spinner("Generating catacaustic points..."):
-                    cat_points = compute_catacaustic_points(incident_angle, focal_length, hole_radius, dish_diameter/2)
-                    if cat_points:
-                        df = pd.DataFrame(cat_points, columns=['X', 'Y', 'Z'])
+                    if show_multi_angle:
+                        # Export all angles
+                        all_data = []
+                        angle_list = linspace(angle_start, angle_end, angle_steps)
+                        for angle in angle_list:
+                            cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_diameter/2)
+                            for point in cat_points:
+                                all_data.append({
+                                    'Angle': angle,
+                                    'X': point[0],
+                                    'Y': point[1],
+                                    'Z': point[2]
+                                })
                         
-                        csv = df.to_csv(index=False)
-                        st.download_button(
-                            label="Download CSV",
-                            data=csv,
-                            file_name=f"catacaustic_points_angle_{incident_angle:.1f}deg.csv",
-                            mime="text/csv"
-                        )
-                        
-                        st.success(f"✅ Generated {len(cat_points)} points")
+                        if all_data:
+                            df = pd.DataFrame(all_data)
+                            csv = df.to_csv(index=False)
+                            st.download_button(
+                                label="Download Multi-Angle CSV",
+                                data=csv,
+                                file_name=f"catacaustic_multiangle_{angle_start:.0f}to{angle_end:.0f}deg.csv",
+                                mime="text/csv"
+                            )
+                            st.success(f"✅ Generated {len(all_data)} points for {len(angle_list)} angles")
                     else:
-                        st.warning("No catacaustic points generated")
+                        # Export single angle
+                        cat_points = compute_catacaustic_points(incident_angle, focal_length, hole_radius, dish_diameter/2)
+                        if cat_points:
+                            df = pd.DataFrame(cat_points, columns=['X', 'Y', 'Z'])
+                            csv = df.to_csv(index=False)
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv,
+                                file_name=f"catacaustic_points_angle_{incident_angle:.1f}deg.csv",
+                                mime="text/csv"
+                            )
+                            st.success(f"✅ Generated {len(cat_points)} points")
+                        else:
+                            st.warning("No catacaustic points generated")
         
         with col_export2:
             if animate_angles:
