@@ -608,10 +608,17 @@ def main():
         help="Show catacaustic collapse animation"
     )
     
+    # Define angle variables for both modes
     if animate_angles:
         angle_start = st.sidebar.slider("Start Angle (deg):", 0.0, 90.0, 50.0, 1.0)
         angle_end = st.sidebar.slider("End Angle (deg):", 0.0, 90.0, 90.0, 1.0)
         angle_steps = st.sidebar.slider("Animation Steps:", 3, 20, 10, 1)
+        
+        # Use current frame angle or default for static display
+        if len(st.session_state.angle_values) > 0 and st.session_state.current_frame < len(st.session_state.angle_values):
+            incident_angle = st.session_state.angle_values[st.session_state.current_frame]
+        else:
+            incident_angle = angle_end  # Default to end angle when not animating
         
         col_a, col_b = st.sidebar.columns(2)
         with col_a:
@@ -625,7 +632,7 @@ def main():
                 st.session_state.create_gif = True
                 st.session_state.gif_angles = linspace(angle_start, angle_end, angle_steps)
     else:
-        # Single angle control
+        # Single angle control - always available
         incident_angle = st.sidebar.slider(
             "Incident Angle (degrees):",
             min_value=0.0,
@@ -634,6 +641,10 @@ def main():
             step=0.1,
             help="Angle of incoming RF waves"
         )
+        # Set default values for animation variables
+        angle_start = 50.0
+        angle_end = 90.0
+        angle_steps = 10
     
     # Single ray analysis
     st.sidebar.header("🔬 Single Ray Analysis")
@@ -680,22 +691,23 @@ def main():
             efficiency = 1 - (blocked_area / (np.pi * (dish_diameter/2)**2))
             st.metric("Aperture Efficiency", f"{efficiency:.1%}")
         
-        # Current angle display
-        if animate_angles and len(st.session_state.angle_values) > 0 and st.session_state.current_frame < len(st.session_state.angle_values):
-            current_angle = st.session_state.angle_values[st.session_state.current_frame]
-            st.metric("Current Angle", f"{current_angle:.1f}°")
-        elif not animate_angles:
-            st.metric("Incident Angle", f"{incident_angle:.1f}°")
+        # Current angle display - always show the current incident angle
+        st.metric("Current Incident Angle", f"{incident_angle:.1f}°")
+        
+        # Animation status
+        if animate_angles:
+            if st.session_state.get('animate', False):
+                frame = st.session_state.get('current_frame', 0)
+                total_frames = len(st.session_state.get('angle_values', []))
+                if total_frames > 0:
+                    st.metric("Animation Progress", f"{frame + 1}/{total_frames}")
+            else:
+                st.info("Click ▶️ to start animation")
         
         # Single ray analysis
         if analyze_ray:
             st.subheader("🔬 Ray Path Analysis")
-            angle_to_use = incident_angle if not animate_angles else (
-                st.session_state.angle_values[st.session_state.current_frame] 
-                if len(st.session_state.angle_values) > 0 and st.session_state.current_frame < len(st.session_state.angle_values)
-                else 90.0
-            )
-            ray_data = compute_ray_path(angle_to_use, focal_length, hole_radius, ray_radius, ray_theta)
+            ray_data = compute_ray_path(incident_angle, focal_length, hole_radius, ray_radius, ray_theta)
             
             st.write("**Path Distances:**")
             st.write(f"Incident: {ray_data['d_inc']:.4f} m")
@@ -783,7 +795,7 @@ def main():
                     st.metric("Catacaustic Spread", f"{spread:.4f} m")
                 
                 # Auto-advance animation
-                time.sleep(1)  # Delay between frames
+                time.sleep(0.8)  # Slightly faster animation
                 st.session_state.current_frame = frame + 1
                 st.rerun()
             else:
@@ -813,9 +825,8 @@ def main():
         
         with col_export1:
             if st.button("📊 Export Catacaustic Points"):
-                angle_to_use = incident_angle if not animate_angles else 90.0
                 with st.spinner("Generating catacaustic points..."):
-                    cat_points = compute_catacaustic_points(angle_to_use, focal_length, hole_radius, dish_diameter/2)
+                    cat_points = compute_catacaustic_points(incident_angle, focal_length, hole_radius, dish_diameter/2)
                     if cat_points:
                         df = pd.DataFrame(cat_points, columns=['X', 'Y', 'Z'])
                         
@@ -823,7 +834,7 @@ def main():
                         st.download_button(
                             label="Download CSV",
                             data=csv,
-                            file_name=f"catacaustic_points_angle_{angle_to_use:.1f}deg.csv",
+                            file_name=f"catacaustic_points_angle_{incident_angle:.1f}deg.csv",
                             mime="text/csv"
                         )
                         
