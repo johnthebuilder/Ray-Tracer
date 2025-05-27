@@ -456,46 +456,60 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
 
 def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter):
     """Create GIF animation of catacaustic collapse"""
+    try:
+        # Check if kaleido is available for image export
+        import kaleido
+    except ImportError:
+        st.error("❌ Kaleido library not available for GIF export. Install with: pip install kaleido")
+        return None
+    
     images = []
     
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    for i, angle in enumerate(angle_values):
-        status_text.text(f"Generating frame {i+1}/{len(angle_values)} (θ={angle:.1f}°)")
+    try:
+        for i, angle in enumerate(angle_values):
+            status_text.text(f"Generating frame {i+1}/{len(angle_values)} (θ={angle:.1f}°)")
+            
+            # Create figure for this angle with zoom
+            fig = create_plotly_visualization(
+                angle, hole_radius, focal_length, dish_diameter,
+                show_incident=False, grid_res=3, show_focal_plane=True, 
+                show_rotated_plane=False, single_ray_data=None, 
+                zoom_to_catacaustic=True
+            )
+            
+            # Convert to image
+            img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
+            img = Image.open(io.BytesIO(img_bytes))
+            images.append(img)
+            
+            progress_bar.progress((i + 1) / len(angle_values))
         
-        # Create figure for this angle with zoom
-        fig = create_plotly_visualization(
-            angle, hole_radius, focal_length, dish_diameter,
-            show_incident=False, grid_res=3, show_focal_plane=True, 
-            show_rotated_plane=False, single_ray_data=None, 
-            zoom_to_catacaustic=True
-        )
-        
-        # Convert to image
-        img_bytes = fig.to_image(format="png", width=800, height=600, scale=2)
-        img = Image.open(io.BytesIO(img_bytes))
-        images.append(img)
-        
-        progress_bar.progress((i + 1) / len(angle_values))
+        # Create GIF
+        if images:
+            gif_buffer = io.BytesIO()
+            images[0].save(
+                gif_buffer,
+                format='GIF',
+                save_all=True,
+                append_images=images[1:],
+                duration=500,  # 500ms per frame
+                loop=0  # Loop forever
+            )
+            gif_buffer.seek(0)
+            
+            status_text.text("✅ GIF animation created!")
+            progress_bar.empty()
+            
+            return gif_buffer.getvalue()
     
-    # Create GIF
-    if images:
-        gif_buffer = io.BytesIO()
-        images[0].save(
-            gif_buffer,
-            format='GIF',
-            save_all=True,
-            append_images=images[1:],
-            duration=500,  # 500ms per frame
-            loop=0  # Loop forever
-        )
-        gif_buffer.seek(0)
-        
-        status_text.text("✅ GIF animation created!")
+    except Exception as e:
+        st.error(f"❌ Error creating GIF: Please install kaleido with: pip install kaleido")
         progress_bar.empty()
-        
-        return gif_buffer.getvalue()
+        status_text.empty()
+        return None
     
     return None
 
@@ -821,6 +835,7 @@ def main():
             if animate_angles:
                 if st.button("📋 Export Animation Data"):
                     all_data = []
+                    # Use the same angles as defined in the animation section
                     angles = linspace(angle_start, angle_end, angle_steps)
                     
                     with st.spinner("Computing all frames..."):
