@@ -421,13 +421,13 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
                 showlegend=False
             ))
     
-    # Add catacaustic points (larger for animation)
+    # Add catacaustic points (smaller marker sizes)
     if cat_points:
         cat_x = [p[0] for p in cat_points]
         cat_y = [p[1] for p in cat_points]
         cat_z = [p[2] for p in cat_points]
         
-        marker_size = 4 if zoom_to_catacaustic else 2
+        marker_size = 2 if zoom_to_catacaustic else 1.5  # Reduced from 4/2 to 2/1.5
         fig.add_trace(go.Scatter3d(
             x=cat_x, y=cat_y, z=cat_z,
             mode='markers',
@@ -519,7 +519,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             name='Focal Plane (z = f)'
         ))
     
-    # Add catacaustic points for each angle with distinct colors
+    # Add catacaustic points for each angle with distinct colors (smaller sizes)
     min_angle = min(angle_values)
     max_angle = max(angle_values)
     
@@ -537,7 +537,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             fig.add_trace(go.Scatter3d(
                 x=cat_x, y=cat_y, z=cat_z,
                 mode='markers',
-                marker=dict(size=3, color=color),
+                marker=dict(size=1.5, color=color),  # Reduced from 3 to 1.5
                 name=f'θ={angle:.1f}°'
             ))
     
@@ -616,7 +616,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 name='Focal Plane'
             ))
             
-            # Add catacaustic points for current angle
+            # Add catacaustic points for current angle (smaller size)
             cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_radius)
             
             if cat_points:
@@ -630,7 +630,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 fig.add_trace(go.Scatter3d(
                     x=cat_x, y=cat_y, z=cat_z,
                     mode='markers',
-                    marker=dict(size=4, color=color),
+                    marker=dict(size=2, color=color),  # Reduced from 4 to 2
                     name=f'Catacaustic θ={angle:.1f}°'
                 ))
             
