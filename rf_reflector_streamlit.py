@@ -421,14 +421,14 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
                 showlegend=False
             ))
     
-    # Add catacaustic points (ultra-small marker sizes for finest detail)
+    # Add catacaustic points (normal marker sizes for general viewing)
     if cat_points:
         cat_x = [p[0] for p in cat_points]
         cat_y = [p[1] for p in cat_points]
         cat_z = [p[2] for p in cat_points]
         
-        # Ultra-small marker sizes for finest field visualization
-        marker_size = 0.6 if zoom_to_catacaustic else 0.4  # Even smaller: 1.0/0.8 → 0.6/0.4
+        # Normal marker sizes for general view, smaller for zoom
+        marker_size = 1.5 if zoom_to_catacaustic else 2.0  # Back to larger for general view
         fig.add_trace(go.Scatter3d(
             x=cat_x, y=cat_y, z=cat_z,
             mode='markers',
@@ -540,7 +540,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             fig.add_trace(go.Scatter3d(
                 x=cat_x, y=cat_y, z=cat_z,
                 mode='markers',
-                marker=dict(size=0.5, color=color),  # Ultra-small: reduced from 0.8 to 0.5
+                marker=dict(size=1.5, color=color),  # Normal size for multi-angle view
                 name=f'θ={angle:.1f}°'
             ))
     
@@ -565,8 +565,8 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
     
     return fig
 
-def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter):
-    """Create enhanced GIF animation showing catacaustic field collapse with improved visualization"""
+def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter, rotation_angle=0):
+    """Create enhanced GIF animation showing catacaustic field collapse with configurable rotation"""
     try:
         # Check if kaleido is available for image export
         import kaleido
@@ -657,24 +657,30 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                     x=cat_x, y=cat_y, z=cat_z,
                     mode='markers',
                     marker=dict(
-                        size=0.8,  # Ultra-small points for finest detail
+                        size=0.5,  # Much smaller points for GIF detail
                         color=color,
-                        opacity=0.9  # High opacity for good visibility
+                        opacity=0.9
                     ),
                     name=f'Catacaustic θ={angle:.1f}°'
                 ))
             
-            # Enhanced scene properties focused on catacaustic region
+            # Enhanced scene properties focused on catacaustic region with configurable rotation
+            rotation_rad = rotation_angle * np.pi / 180
+            base_x, base_y = 3.1, 0.7  # Base camera position (90° rotated)
+            
+            # Apply additional rotation around z-axis
+            cam_x = base_x * np.cos(rotation_rad) - base_y * np.sin(rotation_rad)
+            cam_y = base_x * np.sin(rotation_rad) + base_y * np.cos(rotation_rad)
+            
             scene_dict = dict(
                 aspectmode='manual',
-                aspectratio=dict(x=1, y=1, z=0.8),  # Slightly compressed Z for better viewing
+                aspectratio=dict(x=1, y=1, z=0.8),
                 xaxis=dict(title='X (m)', range=x_range, showgrid=False),
                 yaxis=dict(title='Y (m)', range=y_range, showgrid=False),
                 zaxis=dict(title='Z (m)', range=z_range, showgrid=False),
-                # Enhanced perspective with 45° rotation around z-axis for optimal catacaustic collapse view
                 camera=dict(
-                    eye=dict(x=3.1, y=0.7, z=1.8),  # Rotated ~45° from (2.2,2.2,1.8)
-                    center=dict(x=0, y=0, z=0.3)    # Focus slightly above center
+                    eye=dict(x=cam_x, y=cam_y, z=1.8),
+                    center=dict(x=0, y=0, z=0.3)
                 ),
                 bgcolor='rgba(0,0,0,0.9)'
             )
@@ -744,7 +750,7 @@ def main():
     st.markdown('<h1 class="main-header">📡 RF Paraboloid Reflector Simulation</h1>', 
                 unsafe_allow_html=True)
     
-    st.info("✅ Using Plotly for interactive 3D visualization with enhanced catacaustic field rendering")
+    st.info("✅ Using Plotly for interactive 3D visualization")
     
     # Sidebar controls
     st.sidebar.header("🎛️ Reflector Parameters")
@@ -818,13 +824,24 @@ def main():
     )
     
     # Enhanced Animation controls
-    st.sidebar.header("🎬 Enhanced Animation Controls")
+    st.sidebar.header("🎬 Animation Controls")
     
     animate_angles = st.sidebar.checkbox(
         "Animate Angle Sweep",
         value=False,
-        help="Show enhanced catacaustic collapse animation with better viewpoint"
+        help="Show catacaustic collapse animation"
     )
+    
+    # GIF rotation control
+    if animate_angles:
+        gif_rotation = st.sidebar.slider(
+            "GIF Rotation (degrees):",
+            min_value=0,
+            max_value=360,
+            value=90,
+            step=15,
+            help="Rotate camera view around z-axis"
+        )
     
     # Multi-angle visualization
     show_multi_angle = st.sidebar.checkbox(
@@ -855,20 +872,10 @@ def main():
                     st.session_state.current_frame = 0
             
             with col_b:
-                if st.button("🎬 Enhanced GIF"):
+                if st.button("🎬 Create GIF"):
                     st.session_state.create_gif = True
                     st.session_state.gif_angles = linspace(angle_start, angle_end, angle_steps)
-                    
-            # Enhanced GIF options
-            with st.sidebar.expander("🎨 GIF Enhancement Options"):
-                st.info("""
-                **Enhanced Features:**
-                - Smaller point sizes (1.2px) for finer detail
-                - Optimized viewing angle for collapse visualization  
-                - Static paraboloid with dynamic catacaustic field
-                - Focused bounds on catacaustic region
-                - Higher quality rendering and compression
-                """)
+                    st.session_state.gif_rotation = gif_rotation
     else:
         # Single angle control - always available
         incident_angle = st.sidebar.slider(
@@ -883,6 +890,7 @@ def main():
         angle_start = 50.0
         angle_end = 90.0
         angle_steps = 15
+        gif_rotation = 90
     
     # Single ray analysis
     st.sidebar.header("🔬 Single Ray Analysis")
@@ -943,7 +951,7 @@ def main():
                 if total_frames > 0:
                     st.metric("Animation Progress", f"{frame + 1}/{total_frames}")
             else:
-                st.info("Click ▶️ to start enhanced animation")
+                st.info("Click ▶️ to start animation")
         
         # Single ray analysis
         if analyze_ray and not show_multi_angle:
@@ -1016,7 +1024,7 @@ def main():
         elif show_multi_angle:
             st.subheader("🌈 Multi-Angle Catacaustic View")
             
-            with st.spinner("🔄 Computing enhanced multi-angle visualization..."):
+            with st.spinner("🔄 Computing multi-angle visualization..."):
                 angle_list = linspace(angle_start, angle_end, angle_steps)
                 
                 fig = create_multi_angle_visualization(
@@ -1024,29 +1032,20 @@ def main():
                     show_focal_plane, show_rotated_plane
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            
-            st.info(f"""
-            **Enhanced Multi-Angle View:**
-            - Showing {len(angle_list)} different incident angles
-            - Each angle has a distinct color
-            - Point size: 0.8px for enhanced field detail
-            - Colors range from blue (low angles) to red (high angles)
-            - All catacaustic points displayed simultaneously
-            """)
         
-        # Handle live animation with enhanced zooming
+        # Handle live animation
         elif animate_angles and st.session_state.get('animate', False):
-            # Animation loop with enhanced visualization
+            # Animation loop
             frame = st.session_state.get('current_frame', 0)
             
             if frame < len(st.session_state.angle_values):
                 current_angle = st.session_state.angle_values[frame]
                 
-                st.subheader(f"🎬 Enhanced Animation Frame {frame + 1}/{len(st.session_state.angle_values)}")
+                st.subheader(f"🎬 Animation Frame {frame + 1}/{len(st.session_state.angle_values)}")
                 st.write(f"**Incident Angle: {current_angle:.1f}°**")
                 
-                # Generate enhanced visualization for current angle with zoom
-                with st.spinner(f"Computing enhanced frame {frame + 1}..."):
+                # Generate visualization for current angle with zoom
+                with st.spinner(f"Computing frame {frame + 1}..."):
                     single_ray_data = None
                     if analyze_ray:
                         single_ray_data = compute_ray_path(current_angle, focal_length, hole_radius, ray_radius, ray_theta)
@@ -1059,7 +1058,7 @@ def main():
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 
-                # Show enhanced collapse info
+                # Show collapse info
                 cat_points = compute_catacaustic_points(current_angle, focal_length, hole_radius, dish_diameter/2)
                 if cat_points:
                     # Calculate spread of catacaustic points
@@ -1068,18 +1067,18 @@ def main():
                     spread = np.sqrt(np.var(cat_x) + np.var(cat_y))
                     st.metric("Catacaustic Spread", f"{spread:.4f} m")
                 
-                # Auto-advance animation with better timing
-                time.sleep(0.6)  # Optimized animation speed
+                # Auto-advance animation
+                time.sleep(0.6)
                 st.session_state.current_frame = frame + 1
                 st.rerun()
             else:
-                st.success("✅ Enhanced animation complete!")
+                st.success("✅ Animation complete!")
                 st.balloons()
                 st.session_state.animate = False
                 st.session_state.current_frame = 0
         
         else:
-            # Static visualization with enhanced settings
+            # Static visualization
             with st.spinner("🔄 Computing RF simulation..."):
                 single_ray_data = None
                 if analyze_ray:
@@ -1142,12 +1141,12 @@ def main():
         
         with col_export2:
             if animate_angles:
-                if st.button("📋 Export Enhanced Animation Data"):
+                if st.button("📋 Export Animation Data"):
                     all_data = []
                     # Use the same angles as defined in the animation section
                     angles = linspace(angle_start, angle_end, angle_steps)
                     
-                    with st.spinner("Computing all enhanced frames..."):
+                    with st.spinner("Computing all frames..."):
                         for i, angle in enumerate(angles):
                             cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_diameter/2)
                             for point in cat_points:
@@ -1163,12 +1162,15 @@ def main():
                         df = pd.DataFrame(all_data)
                         csv = df.to_csv(index=False)
                         st.download_button(
-                            label="Download Enhanced Animation CSV",
+                            label="Download Animation CSV",
                             data=csv,
-                            file_name=f"enhanced_catacaustic_animation_{angle_start:.0f}to{angle_end:.0f}deg.csv",
+                            file_name=f"catacaustic_animation_{angle_start:.0f}to{angle_end:.0f}deg.csv",
                             mime="text/csv"
                         )
-                        st.success(f"✅ Generated {len(all_data)} points across {len(angles)} enhanced frames")
+                        st.success(f"✅ Generated {len(all_data)} points across {len(angles)} frames")csv",
+                            mime="text/csv"
+                        )
+                        st.success(f"✅ Generated {len(all_data)} points across {len(angles)} frames")
 
 # Run the app
 main()
