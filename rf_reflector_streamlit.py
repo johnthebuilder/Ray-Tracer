@@ -586,7 +586,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
     return fig
 
 def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter, 
-                        point_size=1.2, rotation_speed=0, frame_duration=400):
+                        point_size=1.2, rotation_speed=0, frame_duration=400, start_view_angle=45):
     """Create enhanced GIF animation with customizable point size and rotation"""
     try:
         # Check if kaleido is available for image export
@@ -635,9 +635,9 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter,
             
             # Calculate view rotation angle for this frame
             if rotation_speed > 0:
-                view_angle = (i * rotation_speed) % 360
+                view_angle = start_view_angle + (i * rotation_speed)
             else:
-                view_angle = 0
+                view_angle = start_view_angle
             
             # Create figure for this frame
             fig = go.Figure()
@@ -710,9 +710,9 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter,
             )
             
             # Update layout with enhanced settings for GIF
-            rotation_info = f" (Rotating {rotation_speed}°/frame)" if rotation_speed > 0 else ""
+            view_info = f"Starting at {start_view_angle}°" if rotation_speed == 0 else f"Rotating from {start_view_angle}°"
             fig.update_layout(
-                title=f'Catacaustic Field Collapse - θ={angle:.1f}° (Frame {i+1}/{len(angle_values)}){rotation_info}',
+                title=f'Catacaustic Collapse - θ={angle:.1f}° ({view_info})',
                 scene=scene_dict,
                 height=600,
                 width=800,
@@ -912,6 +912,15 @@ def main():
                     help="Point size specifically for GIF animation"
                 )
                 
+                start_view_angle = st.slider(
+                    "Starting View Angle (°):",
+                    min_value=0,
+                    max_value=359,
+                    value=45,
+                    step=15,
+                    help="Initial camera position: 0°=front, 90°=left, 180°=back, 270°=right"
+                )
+                
                 rotation_speed = st.slider(
                     "View Rotation (°/frame):",
                     min_value=0,
@@ -929,17 +938,6 @@ def main():
                     step=50,
                     help="Duration of each frame in milliseconds"
                 )
-                
-                st.info(f"""
-                **Enhanced Features:**
-                - Custom point sizes ({gif_point_size}px) for optimal detail
-                - {'Rotating view' if rotation_speed > 0 else 'Static view'} ({rotation_speed}°/frame)
-                - Frame rate: {1000/frame_duration:.1f} FPS
-                - Optimized viewing angle for collapse visualization  
-                - Static paraboloid with dynamic catacaustic field
-                - Focused bounds on catacaustic region
-                - High quality rendering and compression
-                """)
     else:
         # Single angle control - always available
         incident_angle = st.sidebar.slider(
@@ -957,6 +955,7 @@ def main():
         gif_point_size = point_size
         rotation_speed = 0
         frame_duration = 400
+        start_view_angle = 45
     
     # Single ray analysis
     st.sidebar.header("🔬 Single Ray Analysis")
@@ -1041,18 +1040,7 @@ def main():
     with col1:
         # Handle enhanced GIF creation
         if st.session_state.get('create_gif', False):
-            st.subheader("🎬 Creating Enhanced Catacaustic Collapse GIF")
-            
-            rotation_info = f" with {rotation_speed}°/frame rotation" if rotation_speed > 0 else ""
-            st.info(f"""
-            **Enhanced GIF Features:**
-            🔹 Custom point sizes ({gif_point_size}px) for optimal detail
-            🔹 {'Rotating camera view' if rotation_speed > 0 else 'Static optimized viewing angle'}{rotation_info}
-            🔹 Frame duration: {frame_duration}ms ({1000/frame_duration:.1f} FPS)
-            🔹 Static paraboloid with dynamic point cloud only
-            🔹 Focused camera bounds on catacaustic region
-            🔹 Higher quality rendering and smoother animation
-            """)
+            st.subheader("🎬 Creating Enhanced GIF")
             
             gif_data = create_animation_gif(
                 st.session_state.gif_angles, 
@@ -1061,35 +1049,24 @@ def main():
                 dish_diameter,
                 point_size=gif_point_size,
                 rotation_speed=rotation_speed,
-                frame_duration=frame_duration
+                frame_duration=frame_duration,
+                start_view_angle=start_view_angle
             )
             
             if gif_data:
-                st.success("✅ Enhanced catacaustic collapse GIF created successfully!")
+                st.success("✅ GIF created successfully!")
                 
                 # Display the GIF
-                st.image(gif_data, caption="Enhanced Catacaustic Field Collapse Animation")
+                st.image(gif_data, caption="Catacaustic Field Collapse Animation")
                 
                 # Download button
-                rotation_suffix = f"_rot{rotation_speed}" if rotation_speed > 0 else ""
+                view_suffix = f"_start{start_view_angle}" + (f"_rot{rotation_speed}" if rotation_speed > 0 else "")
                 st.download_button(
-                    label="📥 Download Enhanced GIF",
+                    label="📥 Download GIF",
                     data=gif_data,
-                    file_name=f"enhanced_catacaustic_collapse_f{focal_length:.3f}_hole{hole_radius:.3f}_size{gif_point_size}{rotation_suffix}.gif",
+                    file_name=f"catacaustic_collapse_f{focal_length:.3f}_size{gif_point_size}{view_suffix}.gif",
                     mime="image/gif"
                 )
-                
-                # Show enhanced animation details
-                st.info(f"""
-                **Enhanced Animation Details:**
-                - Angles: {st.session_state.gif_angles[0]:.1f}° → {st.session_state.gif_angles[-1]:.1f}°
-                - Frames: {len(st.session_state.gif_angles)}
-                - Duration: {len(st.session_state.gif_angles) * frame_duration / 1000:.1f} seconds
-                - Point Size: {gif_point_size}px (custom for detail)
-                - {'Rotating' if rotation_speed > 0 else 'Static'} view ({rotation_speed}°/frame)
-                - Frame Rate: {1000/frame_duration:.1f} FPS
-                - Quality: High resolution with optimized compression
-                """)
             
             st.session_state.create_gif = False
         
@@ -1107,12 +1084,7 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
             
             st.info(f"""
-            **Enhanced Multi-Angle View:**
-            - Showing {len(angle_list)} different incident angles
-            - Each angle has a distinct color
-            - Point size: {point_size}px for enhanced field detail
-            - Colors range from blue (low angles) to red (high angles)
-            - All catacaustic points displayed simultaneously
+            **Multi-Angle View:** {len(angle_list)} angles, point size: {point_size}px
             """)
         
         # Handle live animation with enhanced zooming
