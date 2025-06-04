@@ -353,7 +353,7 @@ def get_catacaustic_bounds(cat_points, focal, hole_radius):
 def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter, 
                               show_incident, grid_res, show_focal_plane, 
                               show_rotated_plane, single_ray_data=None, 
-                              zoom_to_catacaustic=False):
+                              zoom_to_catacaustic=False, point_size=2.0):
     """Create Plotly 3D visualization"""
     dish_radius = dish_diameter / 2
     
@@ -427,8 +427,8 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
         cat_y = [p[1] for p in cat_points]
         cat_z = [p[2] for p in cat_points]
         
-        # Normal marker sizes for general view, smaller for zoom
-        marker_size = 1.5 if zoom_to_catacaustic else 2.0  # Back to larger for general view
+        # Configurable marker sizes
+        marker_size = point_size * 0.75 if zoom_to_catacaustic else point_size
         fig.add_trace(go.Scatter3d(
             x=cat_x, y=cat_y, z=cat_z,
             mode='markers',
@@ -484,7 +484,7 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
     return fig
 
 def create_multi_angle_visualization(angle_values, focal_length, hole_radius, dish_diameter, 
-                                   show_focal_plane=True, show_rotated_plane=False):
+                                   show_focal_plane=True, show_rotated_plane=False, point_size=1.5):
     """Create visualization showing catacaustic points for all angles with distinct colors"""
     dish_radius = dish_diameter / 2
     
@@ -540,7 +540,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             fig.add_trace(go.Scatter3d(
                 x=cat_x, y=cat_y, z=cat_z,
                 mode='markers',
-                marker=dict(size=1.5, color=color),  # Normal size for multi-angle view
+                marker=dict(size=point_size, color=color),
                 name=f'θ={angle:.1f}°'
             ))
     
@@ -565,7 +565,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
     
     return fig
 
-def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter, rotation_angle=0):
+def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter, rotation_angle=0, gif_point_size=0.5):
     """Create enhanced GIF animation showing catacaustic field collapse with configurable rotation"""
     try:
         # Check if kaleido is available for image export
@@ -657,18 +657,31 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter,
                     x=cat_x, y=cat_y, z=cat_z,
                     mode='markers',
                     marker=dict(
-                        size=0.5,  # Much smaller points for GIF detail
+                        size=gif_point_size,  # Configurable point size for GIF
                         color=color,
                         opacity=0.9
                     ),
                     name=f'Catacaustic θ={angle:.1f}°'
                 ))
             
-            # Enhanced scene properties focused on catacaustic region with configurable rotation
+            # Enhanced scene properties with better side viewing angles
             rotation_rad = rotation_angle * np.pi / 180
-            base_x, base_y = 3.1, 0.7  # Base camera position (90° rotated)
             
-            # Apply additional rotation around z-axis
+            # Better base positions for side viewing of catacaustic field
+            if 0 <= rotation_angle < 90:
+                # Front-side view
+                base_x, base_y = 2.5, 1.5
+            elif 90 <= rotation_angle < 180:
+                # Side view (optimal for catacaustic field)
+                base_x, base_y = 0.5, 3.0
+            elif 180 <= rotation_angle < 270:
+                # Back-side view
+                base_x, base_y = -2.5, 1.5
+            else:
+                # Other side view
+                base_x, base_y = -0.5, 3.0
+            
+            # Apply rotation
             cam_x = base_x * np.cos(rotation_rad) - base_y * np.sin(rotation_rad)
             cam_y = base_x * np.sin(rotation_rad) + base_y * np.cos(rotation_rad)
             
@@ -750,7 +763,7 @@ def main():
     st.markdown('<h1 class="main-header">📡 RF Paraboloid Reflector Simulation</h1>', 
                 unsafe_allow_html=True)
     
-    st.info("✅ Using Plotly for interactive 3D visualization")
+    # Remove this info message entirely
     
     # Sidebar controls
     st.sidebar.header("🎛️ Reflector Parameters")
@@ -794,6 +807,25 @@ def main():
     # Visualization options
     st.sidebar.header("🔍 Visualization Options")
     
+    # Point size controls
+    general_point_size = st.sidebar.slider(
+        "General View Point Size:",
+        min_value=0.5,
+        max_value=5.0,
+        value=2.0,
+        step=0.1,
+        help="Point size for static and multi-angle views"
+    )
+    
+    gif_point_size = st.sidebar.slider(
+        "GIF Point Size:",
+        min_value=0.1,
+        max_value=2.0,
+        value=0.5,
+        step=0.1,
+        help="Point size for GIF animation"
+    )
+    
     show_incident = st.sidebar.checkbox(
         "Show Incident Rays",
         value=True,
@@ -835,12 +867,12 @@ def main():
     # GIF rotation control
     if animate_angles:
         gif_rotation = st.sidebar.slider(
-            "GIF Rotation (degrees):",
+            "GIF View Angle (degrees):",
             min_value=0,
             max_value=360,
             value=90,
             step=15,
-            help="Rotate camera view around z-axis"
+            help="Camera angle around paraboloid - 90° = side view, 0° = front view"
         )
     
     # Multi-angle visualization
@@ -876,6 +908,7 @@ def main():
                     st.session_state.create_gif = True
                     st.session_state.gif_angles = linspace(angle_start, angle_end, angle_steps)
                     st.session_state.gif_rotation = gif_rotation
+                    st.session_state.gif_point_size = gif_point_size
     else:
         # Single angle control - always available
         incident_angle = st.sidebar.slider(
@@ -891,6 +924,8 @@ def main():
         angle_end = 90.0
         angle_steps = 15
         gif_rotation = 90
+        general_point_size = 2.0
+        gif_point_size = 0.5
     
     # Single ray analysis
     st.sidebar.header("🔬 Single Ray Analysis")
@@ -1029,7 +1064,7 @@ def main():
                 
                 fig = create_multi_angle_visualization(
                     angle_list, focal_length, hole_radius, dish_diameter,
-                    show_focal_plane, show_rotated_plane
+                    show_focal_plane, show_rotated_plane, general_point_size
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -1054,7 +1089,8 @@ def main():
                         current_angle, hole_radius, focal_length, dish_diameter,
                         show_incident=False, grid_res=3, show_focal_plane=show_focal_plane, 
                         show_rotated_plane=show_rotated_plane,
-                        single_ray_data=single_ray_data, zoom_to_catacaustic=True
+                        single_ray_data=single_ray_data, zoom_to_catacaustic=True, 
+                        point_size=general_point_size
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 
@@ -1087,7 +1123,7 @@ def main():
                 fig = create_plotly_visualization(
                     incident_angle, hole_radius, focal_length, dish_diameter,
                     show_incident, grid_res, show_focal_plane, show_rotated_plane,
-                    single_ray_data, zoom_to_catacaustic=False
+                    single_ray_data, zoom_to_catacaustic=False, point_size=general_point_size
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
