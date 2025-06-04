@@ -350,10 +350,22 @@ def get_catacaustic_bounds(cat_points, focal, hole_radius):
         'z': [min(cat_z) - z_margin, max(cat_z) + z_margin]
     }
 
+def get_camera_position(view_angle, radius=2.5):
+    """Get camera position based on view angle for rotating views"""
+    # Convert angle to radians
+    angle_rad = view_angle * np.pi / 180
+    
+    # Calculate camera position on a circle around the scene
+    x = radius * np.cos(angle_rad)
+    y = radius * np.sin(angle_rad)
+    z = 1.8  # Keep z constant for horizontal rotation
+    
+    return dict(x=x, y=y, z=z)
+
 def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter, 
                               show_incident, grid_res, show_focal_plane, 
                               show_rotated_plane, single_ray_data=None, 
-                              zoom_to_catacaustic=False):
+                              zoom_to_catacaustic=False, point_size=None, view_angle=0):
     """Create Plotly 3D visualization"""
     dish_radius = dish_diameter / 2
     
@@ -421,14 +433,18 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
                 showlegend=False
             ))
     
-    # Add catacaustic points (smaller marker sizes for better detail)
+    # Add catacaustic points (customizable marker sizes)
     if cat_points:
         cat_x = [p[0] for p in cat_points]
         cat_y = [p[1] for p in cat_points]
         cat_z = [p[2] for p in cat_points]
         
-        # Significantly smaller marker sizes for better field visualization
-        marker_size = 1.0 if zoom_to_catacaustic else 0.8  # Reduced from 2/1.5 to 1.0/0.8
+        # Use custom point size if provided, otherwise use defaults
+        if point_size is not None:
+            marker_size = point_size
+        else:
+            marker_size = 1.0 if zoom_to_catacaustic else 0.8
+            
         fig.add_trace(go.Scatter3d(
             x=cat_x, y=cat_y, z=cat_z,
             mode='markers',
@@ -452,23 +468,28 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
     # Set camera and bounds with enhanced viewpoint for catacaustic visualization
     if zoom_to_catacaustic:
         bounds = get_catacaustic_bounds(cat_points, focal, hole_radius)
+        
+        # Use custom view angle if provided
+        camera_pos = get_camera_position(view_angle) if view_angle != 0 else dict(x=1.8, y=1.8, z=1.5)
+        
         scene_dict = dict(
             aspectmode='cube',
             xaxis=dict(title='X (m)', range=bounds['x']),
             yaxis=dict(title='Y (m)', range=bounds['y']),
             zaxis=dict(title='Z (m)', range=bounds['z']),
-            # Enhanced viewing angle for better catacaustic field visualization
-            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))  # Adjusted for better perspective
+            camera=dict(eye=camera_pos)
         )
         title_suffix = " - Zoomed to Catacaustic Focus"
     else:
+        # Use custom view angle for normal view as well
+        camera_pos = get_camera_position(view_angle) if view_angle != 0 else dict(x=1.5, y=1.5, z=1.5)
+        
         scene_dict = dict(
             aspectmode='data',
             xaxis_title='X (m)',
             yaxis_title='Y (m)',
             zaxis_title='Z (m)',
-            # Optimal viewing angle for overall visualization
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+            camera=dict(eye=camera_pos)
         )
         title_suffix = ""
     
@@ -484,7 +505,7 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
     return fig
 
 def create_multi_angle_visualization(angle_values, focal_length, hole_radius, dish_diameter, 
-                                   show_focal_plane=True, show_rotated_plane=False):
+                                   show_focal_plane=True, show_rotated_plane=False, point_size=0.8):
     """Create visualization showing catacaustic points for all angles with distinct colors"""
     dish_radius = dish_diameter / 2
     
@@ -522,7 +543,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             name='Focal Plane (z = f)'
         ))
     
-    # Add catacaustic points for each angle with distinct colors (much smaller sizes)
+    # Add catacaustic points for each angle with distinct colors
     min_angle = min(angle_values)
     max_angle = max(angle_values)
     
@@ -540,7 +561,7 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             fig.add_trace(go.Scatter3d(
                 x=cat_x, y=cat_y, z=cat_z,
                 mode='markers',
-                marker=dict(size=0.8, color=color),  # Reduced from 1.5 to 0.8 for finer detail
+                marker=dict(size=point_size, color=color),
                 name=f'θ={angle:.1f}°'
             ))
     
@@ -564,8 +585,9 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
     
     return fig
 
-def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter):
-    """Create enhanced GIF animation showing catacaustic field collapse with improved visualization"""
+def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter, 
+                        point_size=1.2, rotation_speed=0, frame_duration=400):
+    """Create enhanced GIF animation with customizable point size and rotation"""
     try:
         # Check if kaleido is available for image export
         import kaleido
@@ -611,6 +633,12 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
         for i, angle in enumerate(angle_values):
             status_text.text(f"Generating enhanced frame {i+1}/{len(angle_values)} (θ={angle:.1f}°)")
             
+            # Calculate view rotation angle for this frame
+            if rotation_speed > 0:
+                view_angle = (i * rotation_speed) % 360
+            else:
+                view_angle = 0
+            
             # Create figure for this frame
             fig = go.Figure()
             
@@ -641,7 +669,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 name='Focal Plane'
             ))
             
-            # Add catacaustic points for current angle (smaller size, enhanced color)
+            # Add catacaustic points for current angle with custom size
             cat_points = compute_catacaustic_points(angle, focal_length, hole_radius, dish_radius)
             
             if cat_points:
@@ -656,12 +684,15 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                     x=cat_x, y=cat_y, z=cat_z,
                     mode='markers',
                     marker=dict(
-                        size=1.2,  # Smaller points for finer detail
+                        size=point_size,  # Custom point size
                         color=color,
                         opacity=0.9  # High opacity for good visibility
                     ),
                     name=f'Catacaustic θ={angle:.1f}°'
                 ))
+            
+            # Get camera position based on rotation
+            camera_pos = get_camera_position(view_angle)
             
             # Enhanced scene properties focused on catacaustic region
             scene_dict = dict(
@@ -670,17 +701,18 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 xaxis=dict(title='X (m)', range=x_range, showgrid=False),
                 yaxis=dict(title='Y (m)', range=y_range, showgrid=False),
                 zaxis=dict(title='Z (m)', range=z_range, showgrid=False),
-                # Optimal viewing angle for catacaustic collapse visualization
+                # Camera position with optional rotation
                 camera=dict(
-                    eye=dict(x=2.2, y=2.2, z=1.8),  # Enhanced perspective
+                    eye=camera_pos,
                     center=dict(x=0, y=0, z=0.3)    # Focus slightly above center
                 ),
                 bgcolor='rgba(0,0,0,0.9)'
             )
             
             # Update layout with enhanced settings for GIF
+            rotation_info = f" (Rotating {rotation_speed}°/frame)" if rotation_speed > 0 else ""
             fig.update_layout(
-                title=f'Catacaustic Field Collapse - θ={angle:.1f}° (Frame {i+1}/{len(angle_values)})',
+                title=f'Catacaustic Field Collapse - θ={angle:.1f}° (Frame {i+1}/{len(angle_values)}){rotation_info}',
                 scene=scene_dict,
                 height=600,
                 width=800,
@@ -702,7 +734,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
             
             progress_bar.progress((i + 1) / len(angle_values))
         
-        # Create enhanced GIF with better settings
+        # Create enhanced GIF with custom settings
         if images:
             gif_buffer = io.BytesIO()
             images[0].save(
@@ -710,7 +742,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 format='GIF',
                 save_all=True,
                 append_images=images[1:],
-                duration=400,  # Faster animation for better flow (400ms per frame)
+                duration=frame_duration,  # Custom frame duration
                 loop=0,  # Loop forever
                 optimize=True,  # Better compression
                 quality=95  # High quality
@@ -832,6 +864,17 @@ def main():
         help="Display catacaustic points for multiple angles simultaneously"
     )
     
+    # Point size control for visualizations
+    st.sidebar.subheader("🎨 Visual Settings")
+    point_size = st.sidebar.slider(
+        "Point Size:",
+        min_value=0.1,
+        max_value=5.0,
+        value=1.2,
+        step=0.1,
+        help="Size of catacaustic points in visualization"
+    )
+    
     # Define angle variables for both modes
     if animate_angles or show_multi_angle:
         angle_start = st.sidebar.slider("Start Angle (deg):", 0.0, 90.0, 50.0, 1.0)
@@ -860,13 +903,42 @@ def main():
                     
             # Enhanced GIF options
             with st.sidebar.expander("🎨 GIF Enhancement Options"):
-                st.info("""
+                gif_point_size = st.slider(
+                    "GIF Point Size:",
+                    min_value=0.1,
+                    max_value=5.0,
+                    value=1.2,
+                    step=0.1,
+                    help="Point size specifically for GIF animation"
+                )
+                
+                rotation_speed = st.slider(
+                    "View Rotation (°/frame):",
+                    min_value=0,
+                    max_value=15,
+                    value=0,
+                    step=1,
+                    help="Degrees to rotate camera per frame (0 = no rotation)"
+                )
+                
+                frame_duration = st.slider(
+                    "Frame Duration (ms):",
+                    min_value=100,
+                    max_value=1000,
+                    value=400,
+                    step=50,
+                    help="Duration of each frame in milliseconds"
+                )
+                
+                st.info(f"""
                 **Enhanced Features:**
-                - Smaller point sizes (1.2px) for finer detail
+                - Custom point sizes ({gif_point_size}px) for optimal detail
+                - {'Rotating view' if rotation_speed > 0 else 'Static view'} ({rotation_speed}°/frame)
+                - Frame rate: {1000/frame_duration:.1f} FPS
                 - Optimized viewing angle for collapse visualization  
                 - Static paraboloid with dynamic catacaustic field
                 - Focused bounds on catacaustic region
-                - Higher quality rendering and compression
+                - High quality rendering and compression
                 """)
     else:
         # Single angle control - always available
@@ -882,6 +954,9 @@ def main():
         angle_start = 50.0
         angle_end = 90.0
         angle_steps = 15
+        gif_point_size = point_size
+        rotation_speed = 0
+        frame_duration = 400
     
     # Single ray analysis
     st.sidebar.header("🔬 Single Ray Analysis")
@@ -968,10 +1043,12 @@ def main():
         if st.session_state.get('create_gif', False):
             st.subheader("🎬 Creating Enhanced Catacaustic Collapse GIF")
             
-            st.info("""
+            rotation_info = f" with {rotation_speed}°/frame rotation" if rotation_speed > 0 else ""
+            st.info(f"""
             **Enhanced GIF Features:**
-            🔹 Smaller point sizes for finer catacaustic field detail
-            🔹 Optimized viewing angle to best show field collapse
+            🔹 Custom point sizes ({gif_point_size}px) for optimal detail
+            🔹 {'Rotating camera view' if rotation_speed > 0 else 'Static optimized viewing angle'}{rotation_info}
+            🔹 Frame duration: {frame_duration}ms ({1000/frame_duration:.1f} FPS)
             🔹 Static paraboloid with dynamic point cloud only
             🔹 Focused camera bounds on catacaustic region
             🔹 Higher quality rendering and smoother animation
@@ -981,7 +1058,10 @@ def main():
                 st.session_state.gif_angles, 
                 focal_length, 
                 hole_radius, 
-                dish_diameter
+                dish_diameter,
+                point_size=gif_point_size,
+                rotation_speed=rotation_speed,
+                frame_duration=frame_duration
             )
             
             if gif_data:
@@ -991,10 +1071,11 @@ def main():
                 st.image(gif_data, caption="Enhanced Catacaustic Field Collapse Animation")
                 
                 # Download button
+                rotation_suffix = f"_rot{rotation_speed}" if rotation_speed > 0 else ""
                 st.download_button(
                     label="📥 Download Enhanced GIF",
                     data=gif_data,
-                    file_name=f"enhanced_catacaustic_collapse_f{focal_length:.3f}_hole{hole_radius:.3f}.gif",
+                    file_name=f"enhanced_catacaustic_collapse_f{focal_length:.3f}_hole{hole_radius:.3f}_size{gif_point_size}{rotation_suffix}.gif",
                     mime="image/gif"
                 )
                 
@@ -1003,9 +1084,10 @@ def main():
                 **Enhanced Animation Details:**
                 - Angles: {st.session_state.gif_angles[0]:.1f}° → {st.session_state.gif_angles[-1]:.1f}°
                 - Frames: {len(st.session_state.gif_angles)}
-                - Duration: {len(st.session_state.gif_angles) * 0.4:.1f} seconds
-                - Point Size: 1.2px (enhanced for detail)
-                - View: Optimized for catacaustic field collapse
+                - Duration: {len(st.session_state.gif_angles) * frame_duration / 1000:.1f} seconds
+                - Point Size: {gif_point_size}px (custom for detail)
+                - {'Rotating' if rotation_speed > 0 else 'Static'} view ({rotation_speed}°/frame)
+                - Frame Rate: {1000/frame_duration:.1f} FPS
                 - Quality: High resolution with optimized compression
                 """)
             
@@ -1020,7 +1102,7 @@ def main():
                 
                 fig = create_multi_angle_visualization(
                     angle_list, focal_length, hole_radius, dish_diameter,
-                    show_focal_plane, show_rotated_plane
+                    show_focal_plane, show_rotated_plane, point_size
                 )
                 st.plotly_chart(fig, use_container_width=True)
             
@@ -1028,7 +1110,7 @@ def main():
             **Enhanced Multi-Angle View:**
             - Showing {len(angle_list)} different incident angles
             - Each angle has a distinct color
-            - Point size: 0.8px for enhanced field detail
+            - Point size: {point_size}px for enhanced field detail
             - Colors range from blue (low angles) to red (high angles)
             - All catacaustic points displayed simultaneously
             """)
@@ -1054,7 +1136,8 @@ def main():
                         current_angle, hole_radius, focal_length, dish_diameter,
                         show_incident=False, grid_res=3, show_focal_plane=show_focal_plane, 
                         show_rotated_plane=show_rotated_plane,
-                        single_ray_data=single_ray_data, zoom_to_catacaustic=True
+                        single_ray_data=single_ray_data, zoom_to_catacaustic=True, 
+                        point_size=point_size
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 
@@ -1087,7 +1170,7 @@ def main():
                 fig = create_plotly_visualization(
                     incident_angle, hole_radius, focal_length, dish_diameter,
                     show_incident, grid_res, show_focal_plane, show_rotated_plane,
-                    single_ray_data, zoom_to_catacaustic=False
+                    single_ray_data, zoom_to_catacaustic=False, point_size=point_size
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
