@@ -421,14 +421,14 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
                 showlegend=False
             ))
     
-    # Add catacaustic points (smaller marker sizes for better detail)
+    # Add catacaustic points (ultra-small marker sizes for finest detail)
     if cat_points:
         cat_x = [p[0] for p in cat_points]
         cat_y = [p[1] for p in cat_points]
         cat_z = [p[2] for p in cat_points]
         
-        # Significantly smaller marker sizes for better field visualization
-        marker_size = 1.0 if zoom_to_catacaustic else 0.8  # Reduced from 2/1.5 to 1.0/0.8
+        # Ultra-small marker sizes for finest field visualization
+        marker_size = 0.6 if zoom_to_catacaustic else 0.4  # Even smaller: 1.0/0.8 → 0.6/0.4
         fig.add_trace(go.Scatter3d(
             x=cat_x, y=cat_y, z=cat_z,
             mode='markers',
@@ -457,8 +457,8 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
             xaxis=dict(title='X (m)', range=bounds['x']),
             yaxis=dict(title='Y (m)', range=bounds['y']),
             zaxis=dict(title='Z (m)', range=bounds['z']),
-            # Enhanced viewing angle for better catacaustic field visualization
-            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))  # Adjusted for better perspective
+            # Enhanced viewing angle rotated 45° around z-axis for better catacaustic field visualization
+            camera=dict(eye=dict(x=2.5, y=0.5, z=1.5))  # Rotated ~45° from (1.8,1.8,1.5)
         )
         title_suffix = " - Zoomed to Catacaustic Focus"
     else:
@@ -467,8 +467,8 @@ def create_plotly_visualization(angle_deg, hole_radius, focal, dish_diameter,
             xaxis_title='X (m)',
             yaxis_title='Y (m)',
             zaxis_title='Z (m)',
-            # Optimal viewing angle for overall visualization
-            camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+            # Optimal viewing angle rotated 45° around z-axis for overall visualization  
+            camera=dict(eye=dict(x=2.1, y=0.4, z=1.5))  # Rotated ~45° from (1.5,1.5,1.5)
         )
         title_suffix = ""
     
@@ -540,17 +540,18 @@ def create_multi_angle_visualization(angle_values, focal_length, hole_radius, di
             fig.add_trace(go.Scatter3d(
                 x=cat_x, y=cat_y, z=cat_z,
                 mode='markers',
-                marker=dict(size=0.8, color=color),  # Reduced from 1.5 to 0.8 for finer detail
+                marker=dict(size=0.5, color=color),  # Ultra-small: reduced from 0.8 to 0.5
                 name=f'θ={angle:.1f}°'
             ))
     
-    # Set scene properties for full dish view
+    # Set scene properties for full dish view with 45° rotated viewpoint
     scene_dict = dict(
         aspectmode='data',
         xaxis_title='X (m)',
         yaxis_title='Y (m)',
         zaxis_title='Z (m)',
-        camera=dict(eye=dict(x=1.5, y=1.5, z=1.5))
+        # Rotated 45° around z-axis from standard (1.5,1.5,1.5) viewpoint
+        camera=dict(eye=dict(x=2.1, y=0.4, z=1.5))
     )
     
     # Update layout
@@ -656,7 +657,7 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                     x=cat_x, y=cat_y, z=cat_z,
                     mode='markers',
                     marker=dict(
-                        size=1.2,  # Smaller points for finer detail
+                        size=0.8,  # Ultra-small points for finest detail
                         color=color,
                         opacity=0.9  # High opacity for good visibility
                     ),
@@ -670,9 +671,9 @@ def create_animation_gif(angle_values, focal_length, hole_radius, dish_diameter)
                 xaxis=dict(title='X (m)', range=x_range, showgrid=False),
                 yaxis=dict(title='Y (m)', range=y_range, showgrid=False),
                 zaxis=dict(title='Z (m)', range=z_range, showgrid=False),
-                # Optimal viewing angle for catacaustic collapse visualization
+                # Enhanced perspective with 45° rotation around z-axis for optimal catacaustic collapse view
                 camera=dict(
-                    eye=dict(x=2.2, y=2.2, z=1.8),  # Enhanced perspective
+                    eye=dict(x=3.1, y=0.7, z=1.8),  # Rotated ~45° from (2.2,2.2,1.8)
                     center=dict(x=0, y=0, z=0.3)    # Focus slightly above center
                 ),
                 bgcolor='rgba(0,0,0,0.9)'
@@ -1004,9 +1005,9 @@ def main():
                 - Angles: {st.session_state.gif_angles[0]:.1f}° → {st.session_state.gif_angles[-1]:.1f}°
                 - Frames: {len(st.session_state.gif_angles)}
                 - Duration: {len(st.session_state.gif_angles) * 0.4:.1f} seconds
-                - Point Size: 1.2px (enhanced for detail)
-                - View: Optimized for catacaustic field collapse
-                - Quality: High resolution with optimized compression
+                - Point Size: 0.8px (ultra-fine for maximum detail)
+                - View: 45° rotated perspective for optimal catacaustic field collapse
+                - Quality: Ultra-high resolution with optimized compression
                 """)
             
             st.session_state.create_gif = False
